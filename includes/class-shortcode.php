@@ -33,6 +33,8 @@ class HH_Vacancies_Shortcode {
 	 * @return string
 	 */
 	public function render( $atts ) {
+		$this->enqueue_assets();
+
 		$atts = shortcode_atts(
 			array(
 				'employer_id' => '',
@@ -48,16 +50,45 @@ class HH_Vacancies_Shortcode {
 		$list = $this->vacancies->get_list( $employer_id, $per_page );
 
 		if ( is_wp_error( $list ) ) {
-			return '<div class="hh-vacancies hh-vacancies--error"><p>' . esc_html( $list->get_error_message() ) . '</p></div>';
+			$html = '<div class="hh-vacancies hh-vacancies--error"><p>' . esc_html( $list->get_error_message() ) . '</p>';
+			if ( current_user_can( 'manage_options' ) ) {
+				$html .= '<p class="hh-vacancies__admin-hint"><a href="' . esc_url( admin_url( 'options-general.php?page=' . HH_Vacancies_Settings::MENU_SLUG ) ) . '">';
+				$html .= esc_html__( 'Открыть настройки плагина', 'hh-vacancies' );
+				$html .= '</a> · ';
+				$html .= esc_html__( 'Код ошибки:', 'hh-vacancies' ) . ' <code>' . esc_html( $list->get_error_code() ) . '</code></p>';
+			}
+			$html .= '</div>';
+			return $html;
 		}
 
 		if ( empty( $list ) ) {
-			return '<div class="hh-vacancies hh-vacancies--empty"><p>' . esc_html__( 'Сейчас нет открытых вакансий.', 'hh-vacancies' ) . '</p></div>';
+			$html = '<div class="hh-vacancies hh-vacancies--empty"><p>' . esc_html__( 'Сейчас нет открытых вакансий.', 'hh-vacancies' ) . '</p>';
+			if ( current_user_can( 'manage_options' ) ) {
+				$html .= '<p class="hh-vacancies__admin-hint">';
+				$html .= esc_html__( 'Проверьте employer_id и нажмите «Проверить API» в настройках плагина.', 'hh-vacancies' );
+				$html .= ' <a href="' . esc_url( admin_url( 'options-general.php?page=' . HH_Vacancies_Settings::MENU_SLUG ) ) . '">';
+				$html .= esc_html__( 'Настройки', 'hh-vacancies' );
+				$html .= '</a></p>';
+			}
+			$html .= '</div>';
+			return $html;
 		}
 
 		$vacancies = $list;
 		ob_start();
 		include HH_VACANCIES_PATH . 'templates/vacancies-list.php';
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Ensure front styles load even if has_shortcode() missed the content.
+	 */
+	private function enqueue_assets() {
+		wp_enqueue_style(
+			'hh-vacancies-front',
+			HH_VACANCIES_URL . 'assets/css/front.css',
+			array(),
+			HH_VACANCIES_VERSION
+		);
 	}
 }

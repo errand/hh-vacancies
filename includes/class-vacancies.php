@@ -179,7 +179,7 @@ class HH_Vacancies_Vacancies {
 	 */
 	public static function format_salary( $salary ) {
 		if ( ! is_array( $salary ) ) {
-			return __( 'Зарплата не указана', 'hh-vacancies' );
+			return '';
 		}
 
 		$from     = isset( $salary['from'] ) ? $salary['from'] : null;
@@ -187,7 +187,7 @@ class HH_Vacancies_Vacancies {
 		$currency = isset( $salary['currency'] ) ? (string) $salary['currency'] : '';
 
 		if ( null === $from && null === $to ) {
-			return __( 'Зарплата не указана', 'hh-vacancies' );
+			return '';
 		}
 
 		$parts = array();
@@ -213,10 +213,24 @@ class HH_Vacancies_Vacancies {
 		}
 
 		if ( $currency ) {
-			$parts[] = $currency;
+			$parts[] = self::format_currency( $currency );
 		}
 
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * @param string $currency API currency code.
+	 * @return string
+	 */
+	private static function format_currency( $currency ) {
+		$map = array(
+			'RUR' => 'руб.',
+			'RUB' => 'руб.',
+		);
+
+		$code = strtoupper( (string) $currency );
+		return isset( $map[ $code ] ) ? $map[ $code ] : $currency;
 	}
 
 	/**
@@ -228,6 +242,6 @@ class HH_Vacancies_Vacancies {
 			return (string) $amount;
 		}
 
-		return number_format_i18n( (float) $amount, 0 );
+		return number_format( (float) $amount, 0, '.', ' ' );
 	}
 }

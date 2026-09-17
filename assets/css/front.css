@@ -23,6 +23,7 @@
 	font-weight: 600;
 	line-height: 1.35;
 	text-decoration: none;
+	color: inherit;
 }
 
 .hh-vacancies__meta {
@@ -35,4 +36,10 @@
 .hh-vacancies--error p,
 .hh-vacancies--empty p {
 	margin: 0;
+}
+
+.hh-vacancies__admin-hint {
+	margin-top: 0.5rem !important;
+	font-size: 0.875rem;
+	opacity: 0.9;
 }

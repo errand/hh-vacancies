@@ -31,7 +31,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<span class="hh-vacancies__meta hh-vacancies__area"><?php echo esc_html( $area ); ?></span>
 				<?php endif; ?>
 
-				<span class="hh-vacancies__meta hh-vacancies__salary"><?php echo esc_html( $salary ); ?></span>
+				<?php if ( $salary ) : ?>
+					<span class="hh-vacancies__meta hh-vacancies__salary"><?php echo esc_html( $salary ); ?></span>
+				<?php endif; ?>
 			</li>
 		<?php endforeach; ?>
 	</ul>

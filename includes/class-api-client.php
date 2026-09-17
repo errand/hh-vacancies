@@ -33,7 +33,7 @@ class HH_Vacancies_Api_Client {
 	/**
 	 * @param string $path Path starting with /.
 	 * @param array  $query Query args.
-	 * @param bool   $retried Whether a token refresh retry already happened.
+	 * @param bool   $retried Whether a token recovery retry already happened.
 	 * @return array|\WP_Error Decoded JSON array.
 	 */
 	public function get( $path, array $query = array(), $retried = false ) {
@@ -52,18 +52,18 @@ class HH_Vacancies_Api_Client {
 			$url = add_query_arg( $query, $url );
 		}
 
-		$response = wp_remote_get(
-			$url,
-			array(
-				'timeout' => 30,
-				'headers' => array(
-					'Authorization' => 'Bearer ' . $token,
-					'User-Agent'    => $user_agent,
-					'HH-User-Agent' => $user_agent,
-					'Accept'        => 'application/json',
-				),
-			)
+		$args = array(
+			'timeout'    => 30,
+			'user-agent' => $user_agent,
+			'headers'    => array(
+				'Authorization' => 'Bearer ' . $token,
+				'User-Agent'    => $user_agent,
+				'HH-User-Agent' => $user_agent,
+				'Accept'        => 'application/json',
+			),
 		);
+
+		$response = wp_remote_get( $url, $args );
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -74,42 +74,176 @@ class HH_Vacancies_Api_Client {
 		$data = json_decode( $body, true );
 
 		if ( 401 === $code || 403 === $code ) {
-			$oauth_error = '';
-			if ( is_array( $data ) && isset( $data['errors'] ) && is_array( $data['errors'] ) ) {
-				foreach ( $data['errors'] as $err ) {
-					if ( isset( $err['type'] ) && 'oauth' === $err['type'] && ! empty( $err['value'] ) ) {
-						$oauth_error = (string) $err['value'];
-						break;
-					}
-				}
-			}
-
-			if ( 'token-revoked' === $oauth_error ) {
-				$this->oauth->clear_tokens();
-			} elseif ( ! $retried && ( 'token-expired' === $oauth_error || ( '' === $oauth_error && 401 === $code ) ) ) {
-				$refreshed = $this->oauth->refresh_tokens();
-				if ( ! is_wp_error( $refreshed ) ) {
-					return $this->get( $path, $query, true );
-				}
-			}
-
-			return new WP_Error(
-				'hh_vacancies_auth',
-				__( 'Ошибка авторизации API. Требуется повторное подключение.', 'hh-vacancies' )
-			);
+			return $this->handle_auth_error( $code, $data, $path, $query, $retried );
 		}
 
 		if ( $code < 200 || $code >= 300 || ! is_array( $data ) ) {
 			return new WP_Error(
 				'hh_vacancies_http',
-				sprintf(
-					/* translators: %d: HTTP status */
-					__( 'Ошибка запроса к API (HTTP %d).', 'hh-vacancies' ),
-					$code
-				)
+				$this->format_http_error( $code, $data )
 			);
 		}
 
 		return $data;
+	}
+
+	/**
+	 * @param int         $code HTTP status.
+	 * @param array|mixed $data Decoded body.
+	 * @param string      $path API path.
+	 * @param array       $query Query args.
+	 * @param bool        $retried Already retried after recovery.
+	 * @return array|\WP_Error
+	 */
+	private function handle_auth_error( $code, $data, $path, $query, $retried ) {
+		$parsed = $this->parse_api_errors( $data );
+		$value  = $this->normalize_oauth_value( $parsed['oauth_value'] );
+
+		$recoverable = $this->is_token_expired( $value )
+			|| in_array( $value, array( 'token_revoked', 'bad_authorization' ), true )
+			|| ( '' === $value && ( 401 === $code || 403 === $code ) );
+
+		if ( $recoverable && ! $retried ) {
+			$recovered = $this->oauth->recover_token();
+			if ( ! is_wp_error( $recovered ) ) {
+				return $this->get( $path, $query, true );
+			}
+
+			return new WP_Error(
+				'hh_vacancies_auth',
+				sprintf(
+					/* translators: 1: oauth value, 2: recovery error */
+					__( 'Не удалось восстановить токен (%1$s): %2$s. Получите токен приложения заново.', 'hh-vacancies' ),
+					$value ? $value : 'bad_authorization',
+					$recovered->get_error_message()
+				)
+			);
+		}
+
+		if ( in_array( $value, array( 'token_revoked', 'bad_authorization', 'application_not_found' ), true ) ) {
+			$this->oauth->clear_tokens();
+			return new WP_Error(
+				'hh_vacancies_auth',
+				sprintf(
+					/* translators: %s: oauth error value */
+					__( 'Ошибка авторизации API (%s). Требуется повторное подключение.', 'hh-vacancies' ),
+					$value
+				)
+			);
+		}
+
+		$message = $this->format_http_error( $code, $data );
+		if ( $parsed['oauth_value'] || $parsed['first_type'] ) {
+			$detail  = trim( $parsed['first_type'] . ( $parsed['oauth_value'] || $parsed['first_value'] ? ' / ' . ( $parsed['oauth_value'] ? $parsed['oauth_value'] : $parsed['first_value'] ) : '' ) );
+			$message = sprintf(
+				/* translators: 1: HTTP status, 2: error detail */
+				__( 'Ошибка API (HTTP %1$d): %2$s', 'hh-vacancies' ),
+				$code,
+				$detail
+			);
+		}
+
+		return new WP_Error( 'hh_vacancies_http', $message );
+	}
+
+	/**
+	 * @param array|mixed $data Response body.
+	 * @return array{oauth_value:string,first_type:string,first_value:string}
+	 */
+	private function parse_api_errors( $data ) {
+		$result = array(
+			'oauth_value' => '',
+			'first_type'  => '',
+			'first_value' => '',
+		);
+
+		if ( ! is_array( $data ) ) {
+			return $result;
+		}
+
+		// Top-level oauth_error (documented in DELETE /token and other 403 samples).
+		if ( ! empty( $data['oauth_error'] ) ) {
+			$result['oauth_value'] = (string) $data['oauth_error'];
+		}
+
+		if ( empty( $data['errors'] ) || ! is_array( $data['errors'] ) ) {
+			return $result;
+		}
+
+		foreach ( $data['errors'] as $err ) {
+			if ( ! is_array( $err ) ) {
+				continue;
+			}
+
+			$type  = isset( $err['type'] ) ? (string) $err['type'] : '';
+			$value = isset( $err['value'] ) ? (string) $err['value'] : '';
+
+			if ( '' === $result['first_type'] && $type ) {
+				$result['first_type']  = $type;
+				$result['first_value'] = $value;
+			}
+
+			if ( 'oauth' === $type && $value && '' === $result['oauth_value'] ) {
+				$result['oauth_value'] = $value;
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Normalize hyphen/underscore variants from OpenAPI vs live API.
+	 *
+	 * @param string $value Raw oauth value.
+	 * @return string
+	 */
+	private function normalize_oauth_value( $value ) {
+		$value = strtolower( str_replace( '-', '_', (string) $value ) );
+		return $value;
+	}
+
+	/**
+	 * @param string $value Normalized oauth value.
+	 * @return bool
+	 */
+	private function is_token_expired( $value ) {
+		return 'token_expired' === $value;
+	}
+
+	/**
+	 * @param int         $code HTTP status.
+	 * @param array|mixed $data Body.
+	 * @return string
+	 */
+	private function format_http_error( $code, $data ) {
+		$parsed = $this->parse_api_errors( $data );
+		if ( $parsed['first_type'] || $parsed['oauth_value'] ) {
+			$detail = $parsed['first_type'] ? $parsed['first_type'] : 'oauth';
+			$val    = $parsed['oauth_value'] ? $parsed['oauth_value'] : $parsed['first_value'];
+			if ( $val ) {
+				$detail .= ' / ' . $val;
+			}
+			return sprintf(
+				/* translators: 1: HTTP status, 2: error detail */
+				__( 'Ошибка API (HTTP %1$d): %2$s', 'hh-vacancies' ),
+				$code,
+				$detail
+			);
+		}
+
+		if ( is_array( $data ) && ! empty( $data['description'] ) ) {
+			return sprintf(
+				/* translators: 1: HTTP status, 2: description */
+				__( 'Ошибка API (HTTP %1$d): %2$s', 'hh-vacancies' ),
+				$code,
+				(string) $data['description']
+			);
+		}
+
+		return sprintf(
+			/* translators: %d: HTTP status */
+			__( 'Ошибка запроса к API (HTTP %d).', 'hh-vacancies' ),
+			$code
+		);
 	}
 }
