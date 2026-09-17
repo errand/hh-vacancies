@@ -1,0 +1,38 @@
+.hh-vacancies {
+	margin: 1.5rem 0;
+}
+
+.hh-vacancies__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.hh-vacancies__item {
+	padding: 0.85rem 0;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.hh-vacancies__item:last-child {
+	border-bottom: 0;
+}
+
+.hh-vacancies__title {
+	display: block;
+	font-size: 1.05rem;
+	font-weight: 600;
+	line-height: 1.35;
+	text-decoration: none;
+}
+
+.hh-vacancies__meta {
+	display: block;
+	margin-top: 0.25rem;
+	font-size: 0.925rem;
+	opacity: 0.85;
+}
+
+.hh-vacancies--error p,
+.hh-vacancies--empty p {
+	margin: 0;
+}

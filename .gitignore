@@ -1,0 +1,52 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+*.code-workspace
+
+# Logs / temp
+*.log
+*.tmp
+*.temp
+.cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Composer / Node (if added later)
+/vendor/
+/node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# PHPUnit / coverage
+/phpunit.xml
+/.phpunit.result.cache
+/coverage/
+/tests/coverage/
+
+# OS / junk
+.Spotlight-V100
+.Trashes
