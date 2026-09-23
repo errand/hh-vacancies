@@ -74,7 +74,8 @@ class HH_Vacancies_Shortcode {
 			return $html;
 		}
 
-		$vacancies = $list;
+		$vacancies   = $list;
+		$show_salary = (bool) HH_Vacancies_Plugin::instance()->settings->get( 'show_salary', false );
 		ob_start();
 		include HH_VACANCIES_PATH . 'templates/vacancies-list.php';
 		return (string) ob_get_clean();

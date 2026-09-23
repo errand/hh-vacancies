@@ -56,6 +56,7 @@ class HH_Vacancies_Settings {
 			'employer_id'   => '',
 			'user_agent'    => '',
 			'cache_ttl'     => self::DEFAULT_CACHE_TTL,
+			'show_salary'   => false,
 		);
 	}
 
@@ -69,7 +70,8 @@ class HH_Vacancies_Settings {
 		}
 
 		$settings = array_merge( self::default_settings(), $stored );
-		$settings['cache_ttl'] = $this->sanitize_cache_ttl( $settings['cache_ttl'] );
+		$settings['cache_ttl']   = $this->sanitize_cache_ttl( $settings['cache_ttl'] );
+		$settings['show_salary'] = ! empty( $settings['show_salary'] );
 
 		return $settings;
 	}
@@ -124,6 +126,7 @@ class HH_Vacancies_Settings {
 			'employer_id'   => __( 'ID работодателя (employer_id)', 'hh-vacancies' ),
 			'user_agent'    => __( 'User-Agent', 'hh-vacancies' ),
 			'cache_ttl'     => __( 'TTL кэша (минуты, макс. 15)', 'hh-vacancies' ),
+			'show_salary'   => __( 'Показывать цену, если указана', 'hh-vacancies' ),
 		);
 
 		foreach ( $fields as $key => $label ) {
@@ -203,6 +206,16 @@ class HH_Vacancies_Settings {
 			return;
 		}
 
+		if ( 'show_salary' === $key ) {
+			printf(
+				'<label><input type="checkbox" name="%1$s" value="1" %2$s /> %3$s</label>',
+				esc_attr( $name ),
+				checked( ! empty( $value ), true, false ),
+				esc_html__( 'Показывать зарплату в списке вакансий, если она указана в API', 'hh-vacancies' )
+			);
+			return;
+		}
+
 		printf(
 			'<input type="text" class="regular-text" name="%1$s" value="%2$s" />',
 			esc_attr( $name ),
@@ -230,6 +243,7 @@ class HH_Vacancies_Settings {
 		$output['employer_id'] = isset( $input['employer_id'] ) ? sanitize_text_field( $input['employer_id'] ) : '';
 		$output['user_agent']  = isset( $input['user_agent'] ) ? sanitize_text_field( $input['user_agent'] ) : '';
 		$output['cache_ttl']   = isset( $input['cache_ttl'] ) ? $this->sanitize_cache_ttl( $input['cache_ttl'] ) : self::DEFAULT_CACHE_TTL;
+		$output['show_salary'] = ! empty( $input['show_salary'] );
 
 		$new_secret = isset( $input['client_secret'] ) ? (string) $input['client_secret'] : '';
 		if ( '' === $new_secret ) {
